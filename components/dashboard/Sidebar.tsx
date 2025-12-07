@@ -13,6 +13,7 @@ const menuItems = [
     { name: "My Info", href: "/dashboard/settings", icon: FiEdit3 },
     { name: "Patients", href: "/dashboard/patients", icon: FiUsers },
     { name: "Schedules", href: "/dashboard/schedules", icon: FiCalendar },
+    { name: "Prescription", href: "/dashboard/prescription", icon: FiActivity },
 ];
 
 export default function Sidebar() {

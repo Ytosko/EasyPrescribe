@@ -131,8 +131,15 @@ export default function DoctorLandingPage() {
                         )}
                     </div>
                     <div className="text-center md:text-left">
-                        <h1 className="text-3xl md:text-5xl font-bold mb-2">{t(profile.personal.name)}</h1>
-                        <p className="text-xl md:text-2xl opacity-90 font-light">{t(profile.personal.speciality)}</p>
+                        <h1 className="text-3xl md:text-5xl font-bold mb-2">
+                            {t(profile.personal.name)}
+                            {t(profile.personal.degrees) && (
+                                <span className="text-xl md:text-3xl opacity-80 font-normal ml-3 block md:inline border-t md:border-t-0 md:border-l border-white/30 pt-2 md:pt-0 md:pl-4 mt-2 md:mt-0">
+                                    {t(profile.personal.degrees)}
+                                </span>
+                            )}
+                        </h1>
+                        <p className="text-xl md:text-2xl opacity-90 font-light mt-2">{t(profile.personal.speciality)}</p>
                         {landingSettings?.topAffiliation && (
                             <p className="text-md md:text-lg text-blue-100 font-medium mt-1">{landingSettings.topAffiliation}</p>
                         )}

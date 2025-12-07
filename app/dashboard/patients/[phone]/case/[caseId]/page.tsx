@@ -99,18 +99,16 @@ export default function CaseDetailsPage() {
             const settingsSnap = await get(ref(db, `users/${user.uid}/settings/prescription`));
 
             if (!settingsSnap.exists()) {
-                Swal.fire({
-                    title: "Configuration Required",
-                    text: "You haven't set up your prescription template yet. Please configure it to proceed.",
-                    icon: "warning",
-                    showCancelButton: true,
-                    confirmButtonColor: "#007ACC",
-                    confirmButtonText: "Configure Now"
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        router.push("/dashboard/prescription");
-                    }
-                });
+                showConfigAlert();
+                return;
+            }
+
+            const settings = settingsSnap.val();
+            // Check for new defaultId OR legacy template data
+            const hasConfig = settings.defaultId || (settings.template && settings.data);
+
+            if (!hasConfig) {
+                showConfigAlert();
                 return;
             }
 
@@ -154,6 +152,21 @@ export default function CaseDetailsPage() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const showConfigAlert = () => {
+        Swal.fire({
+            title: "Configuration Required",
+            text: "You haven't set up your prescription template yet. Please configure it to proceed.",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#007ACC",
+            confirmButtonText: "Configure Now"
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.push("/dashboard/prescription");
+            }
+        });
     };
 
     if (loading) {

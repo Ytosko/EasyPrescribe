@@ -17,6 +17,7 @@ const QuillWrapper = dynamic(() => import('react-quill-new'), {
 export interface ProfileData {
     personal: {
         name: { en: string; bn: string };
+        degrees: { en: string; bn: string };
         speciality: { en: string; bn: string };
         education: { en: string; bn: string };
         appointmentContact: { en: string; bn: string };
@@ -54,6 +55,7 @@ interface ProfileFormProps {
 const initialProfileState: ProfileData = {
     personal: {
         name: { en: "", bn: "" },
+        degrees: { en: "", bn: "" },
         speciality: { en: "", bn: "" },
         education: { en: "", bn: "" },
         appointmentContact: { en: "", bn: "" }
@@ -82,9 +84,25 @@ const initialProfileState: ProfileData = {
 
 export function ProfileForm({ initialData, onSubmit, loading, buttonLabel = "Save Profile" }: ProfileFormProps) {
     const [data, setData] = useState<ProfileData>(() => {
+        // Safe merge of initialData with defaults
         const base = initialData || initialProfileState;
         return {
             ...base,
+            personal: {
+                ...initialProfileState.personal, // start with all default fields
+                ...(base.personal || {}), // override with existing values
+                // explicitly ensure nested objects exist if they were partially missing (though specific fields should be covered by spread above, deeper nesting like 'name' object structure is assumed consistent or we accept overwrite)
+                // However, for 'degrees', if it's missing in base.personal, the spread ...initialProfileState.personal provided it.
+                // BUT, if base.personal existed but lacked degrees, the spread `...(base.personal || {})` would NOT add degrees if it wasn't there? 
+                // Wait, spread `...base.personal` puts the properties of base.personal onto the accumulator.
+                // If I do `{ ...default, ...existing }`:
+                // default has degrees. existing does NOT.
+                // existing does NOT have key 'degrees', so it does NOT overwrite default's 'degrees'.
+                // So `{ ...initialProfileState.personal, ...base.personal }` SHOULD work.
+
+                // Let's be explicit to be safe:
+                degrees: base.personal?.degrees || { en: "", bn: "" },
+            },
             about: base.about || { en: "", bn: "" },
             socials: base.socials || { facebook: "", linkedin: "", twitter: "" }
         };
@@ -92,7 +110,7 @@ export function ProfileForm({ initialData, onSubmit, loading, buttonLabel = "Sav
     const [activeTab, setActiveTab] = useState<"myInfo" | "chamber" | "additional">("myInfo");
     const [langTab, setLangTab] = useState<"en" | "bn">("en");
 
-    const updatePersonalLang = (field: "name" | "speciality" | "education" | "appointmentContact", value: string) => {
+    const updatePersonalLang = (field: "name" | "degrees" | "speciality" | "education" | "appointmentContact", value: string) => {
         setData((prev) => ({
             ...prev,
             personal: {
@@ -203,6 +221,12 @@ export function ProfileForm({ initialData, onSubmit, loading, buttonLabel = "Sav
                                     id="name-bn"
                                 />
                                 <BengaliInput
+                                    label="Degrees (Bengali)"
+                                    value={data.personal.degrees.bn}
+                                    onChangeText={(text) => updatePersonalLang("degrees", text)}
+                                    id="degrees-bn"
+                                />
+                                <BengaliInput
                                     label="Designations / Speciality (Bengali)"
                                     value={data.personal.speciality.bn}
                                     onChangeText={(text) => updatePersonalLang("speciality", text)}
@@ -216,6 +240,12 @@ export function ProfileForm({ initialData, onSubmit, loading, buttonLabel = "Sav
                                     value={data.personal.name.en}
                                     onChange={(e) => updatePersonalLang("name", e.target.value)}
                                     id="name-en"
+                                />
+                                <MaterialInput
+                                    label="Degrees (English)"
+                                    value={data.personal.degrees.en}
+                                    onChange={(e) => updatePersonalLang("degrees", e.target.value)}
+                                    id="degrees-en"
                                 />
                                 <MaterialInput
                                     label="Designations / Speciality (English)"
