@@ -14,26 +14,27 @@
         "affiliation2_en": "Dhaka Medical College & Hospital"
     },
     "patient": {
-        "name": "Mrs. Nusrat Jahan",
-        "age": "28 Yrs",
-        "cc": "Amenorrhea for 8 months\nLower back pain",
+        "name": "text input -> full text",
+        "age": "number input -> input + 'Yrs'",
+        "cc": "text input -> full text",
         "obs_score": {
-            "g": "2",
-            "p": "1",
-            "a": "0",
-            "l": "1"
+            "g": "number input -> input + 'wks'",
+            "p": "number input -> input + 'wks'",
+            "a": "number input -> input + 'wks'",
+            "l": "number input -> input + 'wks'"
         },
-        "lmp": "12/03/2023",
-        "edd": "19/12/2023",
-        "gestational_age": "34 Weeks",
-        "bp": "110/70",
-        "weight": "68 Kg",
-        "edema": "Mild (+)",
-        "pa": "Uterus 34 wks size, Cephalic",
-        "suggested_tests": "1. USG of Pregnancy Profile\n2. Urine R/E\n3. CBS",
-        "provisional_dx": "Primi with 34 wks Pregnancy"
+        "lmp": "date input -> full text as dd/mm/yyyy",
+        "edd": "date input -> full text as dd/mm/yyyy",
+        "gestational_age": "number input -> input + 'Weeks'",
+        "bp": "text input -> full text",
+        "weight": "number input -> input + 'Kg'",
+        "edema": "radio -> 'Mild' or 'Moderate' or 'Severe'",
+        "pa": "text input -> full text",
+        "suggested_tests": "text input -> full text [keep \n as \n ]",
+        "provisional_dx": "text input -> full text [keep \n as \n ]",
+        "notes": "text input -> full text [replace \n with <br> ]"
     },
-    "date": "10/11/2023",
+    "date": "date input -> full text as dd/mm/yyyy",
     "chember": {
         "logo_url": "https://img.freepik.com/premium-vector/abstract-wings-cross-healthcare-icon_1034893-5551.jpg?semt=ais_hybrid&w=740&q=80",
         "name": "Maternity Care Hospital",

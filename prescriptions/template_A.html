@@ -152,7 +152,7 @@
         }
 
         .doc-name-bn {
-            font-size: 24px;
+            font-size: 18px;
             font-weight: 700;
             margin-bottom: 4px;
             color: var(--header-text);
@@ -562,6 +562,11 @@
                     </div>
                 </div>
                 {{/if}}
+
+                <div class="bottom-diagnosis" style="margin-top: auto;">
+                    <span class="field-label">Provisional Diagnosis</span>
+                    <div class="field-value" style="font-weight: 600;">{{@root.patient.provisional_dx}}</div>
+                </div>
             </div>
 
             <!-- Rx Area -->
@@ -603,6 +608,16 @@
                     </tr>
                     {{/each}}
                 </table>
+
+                <!-- Notes Section (Added) -->
+                {{#if @root.patient.notes}}
+                <div style="margin-top: 16px; font-size: 13px;">
+                    <strong style="color: var(--theme-color); font-size: 14px;">Notes:</strong>
+                    <div style="margin-top: 6px; white-space: pre-line; color: var(--text-secondary);">
+                        {{{@root.patient.notes}}}
+                    </div>
+                </div>
+                {{/if}}
 
                 <div class="next-visit">
                     Next Visit: {{@root.next_visit_duration}}

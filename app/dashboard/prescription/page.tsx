@@ -8,6 +8,7 @@ import { FiSave, FiPrinter, FiLayout, FiUser, FiHome, FiCheck } from "react-icon
 import Swal from "sweetalert2";
 import Handlebars from "handlebars";
 import { getTemplates, TemplateData } from "@/app/actions/getTemplates";
+import ImageUpload from "@/components/ui/ImageUpload";
 
 export default function PrescriptionConfigPage() {
     const [loading, setLoading] = useState(true);
@@ -60,7 +61,20 @@ export default function PrescriptionConfigPage() {
             // Handle legacy single config or new multi-config
             if (settings.configurations) {
                 // New Format
-                const configList = Object.entries(settings.configurations).map(([key, val]: [string, any]) => ({ id: key, ...val }));
+                const configList = Object.entries(settings.configurations).map(([key, val]: [string, any]) => {
+                    // Reconstruct internal state: join name (from root) and variant (from data)
+                    const templateState = {
+                        name: val.template?.name || "template_A",
+                        variant: val.data?.template?.variant || val.template?.variant || "variant-1" // Fallback for safety
+                    };
+
+                    return {
+                        id: key,
+                        name: val.data?.configName || val.name || "Untitled Config",
+                        template: templateState,
+                        data: val.data
+                    };
+                });
                 setConfigs(configList);
                 setDefaultConfigId(settings.defaultId || null);
             } else if (settings.template) {
@@ -139,7 +153,26 @@ export default function PrescriptionConfigPage() {
     };
 
     const editConfig = (config: any) => {
-        setActiveConfigData(config);
+        // Find template to get default data (dummy patient info)
+        const template = templates.find(t => t.name === config.template.name);
+        let fullData = config.data;
+
+        if (template) {
+            // Merge stored data (doctor/chamber) with default data (dummy patient/medicines) checking for missing fields
+            // keeping stored data priority
+            fullData = {
+                ...template.defaultData,
+                ...config.data,
+                // Ensure doctor and chamber are deep merged if partly missing (unlikely but safe)
+                doctor: { ...template.defaultData.doctor, ...config.data.doctor },
+                chember: { ...template.defaultData.chember, ...config.data.chember },
+            };
+        }
+
+        setActiveConfigData({
+            ...config,
+            data: fullData
+        });
         setActiveConfigId(config.id);
         setViewMode('edit');
     };
@@ -193,10 +226,29 @@ export default function PrescriptionConfigPage() {
             const configId = activeConfigId || Date.now().toString();
 
             // Structure to save
+            // Strict Schema as requested:
+            // "key": {
+            //    "template": { "name": "template_A" },
+            //    "data": {
+            //       "template": { "variant": "variant-4" },
+            //       "doctor": { ... },
+            //       "chember": { ... },
+            //       "configName": "..."
+            //    }
+            // }
             const configToSave = {
-                name: activeConfigData.name,
-                template: activeConfigData.template,
-                data: activeConfigData.data
+                template: {
+                    name: activeConfigData.template.name
+                },
+                data: {
+                    // Start with clean object to avoid leaking patient data
+                    template: {
+                        variant: activeConfigData.template.variant
+                    },
+                    doctor: activeConfigData.data.doctor,
+                    chember: activeConfigData.data.chember,
+                    configName: activeConfigData.name
+                }
             };
 
             await set(ref(db, `users/${user.uid}/settings/prescription/configurations/${configId}`), configToSave);
@@ -398,7 +450,15 @@ export default function PrescriptionConfigPage() {
                                         <InputGroup label="Chamber Name" value={activeConfigData.data.chember.name} onChange={(v) => handleDataChange('chember', 'name', v)} />
                                         <InputGroup label="Address" value={activeConfigData.data.chember.address} onChange={(v) => handleDataChange('chember', 'address', v)} />
                                         <InputGroup label="Mobile" value={activeConfigData.data.chember.mobile} onChange={(v) => handleDataChange('chember', 'mobile', v)} />
-                                        <InputGroup label="Logo URL" value={activeConfigData.data.chember.logo_url} onChange={(v) => handleDataChange('chember', 'logo_url', v)} />
+
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-slate-500">Logo</label>
+                                            <ImageUpload
+                                                value={activeConfigData.data.chember.logo_url}
+                                                onChange={(url) => handleDataChange('chember', 'logo_url', url)}
+                                                folder={`users/${user.uid}/settings/logos`}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -421,7 +481,7 @@ export default function PrescriptionConfigPage() {
                     <div className="flex-1 bg-slate-200 overflow-y-auto p-8 flex justify-center h-full">
                         <div
                             className="bg-white shadow-2xl relative flex-shrink-0 origin-top transform scale-75 md:scale-90 lg:scale-100 transition-transform"
-                            style={{ width: '794px', height: '1123px' }}
+                            style={{ width: '794px', height: '1050px' }}
                             dangerouslySetInnerHTML={{ __html: previewHtml }}
                         />
                     </div>
