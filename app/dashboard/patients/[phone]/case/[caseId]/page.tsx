@@ -9,7 +9,7 @@ import { FiArrowLeft, FiPlus, FiFileText, FiClock, FiTrash2, FiFolder, FiSave } 
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import Swal from "sweetalert2";
-import printJS from "print-js";
+// import printJS from "print-js"; // Dynamically imported cleanly
 import PrescriptionModal from "@/components/prescription/PrescriptionModal";
 import PrescriptionViewer from "@/components/prescription/PrescriptionViewer";
 
@@ -412,7 +412,10 @@ export default function CaseDetailsPage() {
                                             {pdfUrl ? (
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button
-                                                        onClick={() => printJS(pdfUrl)}
+                                                        onClick={async () => {
+                                                            const printJS = (await import("print-js")).default;
+                                                            printJS(pdfUrl);
+                                                        }}
                                                         className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-50 transition flex items-center gap-1.5"
                                                     >
                                                         🖨️ Print

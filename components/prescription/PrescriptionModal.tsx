@@ -10,6 +10,8 @@ import { createPrescription } from "@/app/actions/createPrescription";
 
 import { BengaliInput } from "@/components/ui/BengaliInput";
 import { BengaliTextarea } from "@/components/ui/BengaliTextarea";
+import { getGeminiSuggestions } from "@/app/actions/gemini";
+import Swal from "sweetalert2";
 
 interface PrescriptionModalProps {
     isOpen?: boolean;
@@ -25,6 +27,7 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
     const [configs, setConfigs] = useState<any[]>([]);
     const [selectedConfigId, setSelectedConfigId] = useState<string>("");
     const [loading, setLoading] = useState(true);
+    const [aiLoading, setAiLoading] = useState(false);
     const [isBanglaMode, setIsBanglaMode] = useState(false);
 
     // General Form State
@@ -229,7 +232,15 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                     });
 
                     if (patientData) {
-                        if (initialFields.hasOwnProperty('name')) initialFields['name'] = patientData.name || patientData.patientName || initialFields['name'];
+                        if (initialFields.hasOwnProperty('name')) {
+                            let pName = patientData.name || patientData.patientName || initialFields['name'];
+                            const pSex = patientData.sex || patientData.gender;
+                            // Only append if it's not already there (simple check) and we have sex
+                            if (pName && pSex && !pName.includes(`(${pSex})`)) {
+                                pName = `${pName} (${pSex})`;
+                            }
+                            initialFields['name'] = pName;
+                        }
 
                         let pAge = patientData.age || "";
                         if (pAge && (pAge.includes('Yr') || pAge.includes('Year'))) {
@@ -258,8 +269,16 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
 
     const handleAddMedicine = () => {
         if (!newMed.name) return;
-        setMedicines(prev => [...prev, { ...newMed, index: prev.length + 1 }]);
+        setMedicines(prev => [...prev, { ...newMed, index: prev.length + 1, isVerified: true }]);
         setNewMed({ name: '', dosage: '', duration: '', instruction: '' });
+    };
+
+    const handleRemoveUnverified = () => {
+        setMedicines(prev => prev.filter(m => m.isVerified !== false));
+    };
+
+    const handleVerifyMedicine = (index: number) => {
+        setMedicines(prev => prev.map((m, i) => i === index ? { ...m, isVerified: true } : m));
     };
 
     const handleDeleteMedicine = (index: number) => {
@@ -292,6 +311,11 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
         const pages: any[] = [];
         const templatePage = (baseData.pages && baseData.pages[0]) ? baseData.pages[0] : {};
         const MEDICINES_PER_PAGE = 6;
+
+        if (medicines.some(m => m.isVerified === false)) {
+            alert("Please verify all AI-suggested medicines or remove them before creating the prescription.");
+            return;
+        }
 
         if (medicines.length === 0) {
             pages.push({ ...templatePage, medicines: [] });
@@ -334,6 +358,14 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
             }
             formattedFields[key] = val;
         });
+
+        // Custom: Append Sex to Name as requested: "Name (Sex)"
+        if (formattedFields['name']) {
+            const sex = formattedFields['sex'] || formattedFields['gender'];
+            if (sex) {
+                formattedFields['name'] = `${formattedFields['name']} (${sex})`;
+            }
+        }
 
         const dynamicPatientTree = unflattenObject(formattedFields);
 
@@ -380,7 +412,106 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
         executeCreation();
     };
 
-    // --- Renderers ---
+    const handleAiSuggest = async () => {
+        // Validation: Check if context is filled
+        // We check for at least some clinical data. 
+        // We exclude 'test', 'advice', 'note', 'plan' from this check as they are outputs.
+        const relevantKeys = Object.keys(patientFields).filter(k => {
+            const lower = k.toLowerCase();
+            return !lower.includes('test') && !lower.includes('investigation') && !lower.includes('advice') && !lower.includes('note') && !lower.includes('plan') && !lower.includes('instruction');
+        });
+
+        var hasContext = relevantKeys.some(k => patientFields[k] && patientFields[k].length > 0);
+        // make sure at least 3 keys have data not "" or null except age and name so total 5 inclusing name and age make sure name and age have data
+        hasContext =
+            // 1. Check if 'name' and 'age' have data
+            patientFields['age']?.length > 0 &&
+            patientFields['name']?.length > 0 &&
+
+            // 2. Check if at least 3 relevant keys (excluding name/age) have data
+            relevantKeys.filter(k => patientFields[k]?.length > 0).length >= 3;
+
+        if (!hasContext) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Not Enough Context',
+                text: 'Please provide more context for the patient for AI suggestions.',
+                customClass: {
+                    container: 'my-swal-container', // Custom class for the container
+                    popup: 'my-swal-popup' // Custom class for the popup itself
+                }
+            });
+            return;
+        }
+
+        setAiLoading(true);
+        try {
+            // 1. Gather Context - We send the entire patientFields as requested
+            // We map it to the structure expected by the server action or just pass it as diagnosis/extra
+            const contextData = {
+                age: patientFields['age'] || patientData?.age || "",
+                gender: patientFields['sex'] || patientFields['gender'] || patientData?.sex || "",
+                complaints: patientFields['cc'] || patientFields['chief_complaints'] || "",
+                history: patientFields['history'] || "",
+                diagnosis: patientFields // Sending all fields as requested
+            };
+
+            // 2. Call API
+            const result = await getGeminiSuggestions(contextData, isBanglaMode);
+
+            if (result.error) {
+                console.error("AI Error:", result.error);
+                alert("AI Error: " + result.error);
+                return;
+            }
+
+            // 3. Update Fields
+            setPatientFields(prev => {
+                const updated = { ...prev };
+
+                // Find keys for Tests and Advice
+                const testKey = Object.keys(updated).find(k => k.toLowerCase().includes('test') || k.toLowerCase().includes('investigation'));
+                const adviceKey = Object.keys(updated).find(k => k.toLowerCase().includes('advice') || k.toLowerCase().includes('note') || k.toLowerCase().includes('instruction'));
+
+                if (testKey && result.tests.length > 0) {
+                    // Clear previous and replace
+                    updated[testKey] = result.tests.join("\n");
+                }
+
+                if (adviceKey && result.advice.length > 0) {
+                    // Clear previous and replace
+                    updated[adviceKey] = result.advice.join("\n");
+                }
+
+                return updated;
+            });
+
+            // 4. Update Medicines
+            if (result.medicines && result.medicines.length > 0) {
+                setMedicines(prev => {
+                    // Remove existing unverified medicines (if any, from previous AI calls)
+                    const verifiedOnly = prev.filter(m => m.isVerified !== false);
+
+                    const newMedicines = result.medicines.map((m, idx) => ({
+                        name: m.name,
+                        dosage: m.dosage,
+                        duration: m.duration,
+                        instruction: m.instruction,
+                        index: verifiedOnly.length + idx + 1,
+                        isVerified: false // Mark as unverified
+                    }));
+
+                    return [...verifiedOnly, ...newMedicines];
+                });
+            }
+
+        } catch (e) {
+            console.error("AI Exception:", e);
+            alert("Failed to get suggestions.");
+        } finally {
+            setAiLoading(false);
+        }
+    };
 
     // Helper for Bengali Toggle logic
     const shouldEnableBangla = (key: string) => {
@@ -390,6 +521,8 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
         if (k.includes('name') || k === 'age' || k.includes('phone') || k.includes('mobile')) return false;
         return true;
     };
+
+
 
     const renderField = (key: string) => {
         const conf = fieldConfigs[key] || { inputType: 'text' };
@@ -413,7 +546,19 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
         if (conf.inputType === 'number') {
             return (
                 <div className="flex flex-col gap-1">
-                    <Label>{key.replace(/_/g, ' ').toUpperCase()}</Label>
+                    <div className="flex justify-between items-center">
+                        <Label>{key.replace(/_/g, ' ').toUpperCase()}</Label>
+                        {(key.toLowerCase().includes('test') || key.toLowerCase().includes('advice') || key.toLowerCase().includes('note') || key.toLowerCase().includes('plan')) && (
+                            <button
+                                onClick={handleAiSuggest}
+                                disabled={aiLoading}
+                                className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 hover:bg-purple-100 transition flex items-center gap-1 disabled:opacity-50"
+                                title="Auto-suggest with AI"
+                            >
+                                {aiLoading ? "✨ Thinking..." : "✨ AI Suggest"}
+                            </button>
+                        )}
+                    </div>
                     <div className="relative">
                         <input
                             type="number"
@@ -470,7 +615,21 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
             if (shouldEnableBangla(key)) {
                 return (
                     <BengaliTextarea
-                        label={key.replace(/_/g, ' ').toUpperCase()}
+                        label={(
+                            <div className="flex justify-between items-center w-full">
+                                <span>{key.replace(/_/g, ' ').toUpperCase()}</span>
+                                {(key.toLowerCase().includes('test') || key.toLowerCase().includes('advice') || key.toLowerCase().includes('note') || key.toLowerCase().includes('plan')) && (
+                                    <button
+                                        onClick={handleAiSuggest}
+                                        disabled={aiLoading}
+                                        className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 hover:bg-purple-100 transition flex items-center gap-1 ml-2 disabled:opacity-50"
+                                        title="Auto-suggest with AI"
+                                    >
+                                        {aiLoading ? "✨ Thinking..." : "✨ AI Suggest"}
+                                    </button>
+                                )}
+                            </div>
+                        ) as any}
                         value={val}
                         onChangeText={onChange}
                         rows={3}
@@ -480,7 +639,19 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
             }
             return (
                 <div className="flex flex-col gap-1">
-                    <Label>{key.replace(/_/g, ' ').toUpperCase()}</Label>
+                    <div className="flex justify-between items-center">
+                        <Label>{key.replace(/_/g, ' ').toUpperCase()}</Label>
+                        {(key.toLowerCase().includes('test') || key.toLowerCase().includes('advice') || key.toLowerCase().includes('note') || key.toLowerCase().includes('plan')) && (
+                            <button
+                                onClick={handleAiSuggest}
+                                disabled={aiLoading}
+                                className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 hover:bg-purple-100 transition flex items-center gap-1 disabled:opacity-50"
+                                title="Auto-suggest with AI"
+                            >
+                                {aiLoading ? "✨ Thinking..." : "✨ AI Suggest"}
+                            </button>
+                        )}
+                    </div>
                     <textarea
                         value={val}
                         onChange={(e) => onChange(e.target.value)}
@@ -571,9 +742,29 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                 {/* Col 3: Medicines & Actions (5 Columns) */}
                 <div className="col-span-5 bg-slate-50 relative border-l border-slate-200">
                     <div className="sticky top-0 h-screen max-h-screen overflow-y-auto custom-scrollbar p-4 flex flex-col">
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xl">💊</span>
-                            <span className="text-sm font-bold text-slate-700 uppercase">Medicines</span>
+                        <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xl">💊</span>
+                                <span className="text-sm font-bold text-slate-700 uppercase">Medicines</span>
+                            </div>
+                            <div className="flex gap-2">
+                                {medicines.some((m: any) => m.isVerified === false) && (
+                                    <button
+                                        onClick={handleRemoveUnverified}
+                                        className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100 hover:bg-red-100 transition"
+                                    >
+                                        Remove Unverified
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleAiSuggest}
+                                    disabled={aiLoading}
+                                    className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 hover:bg-purple-100 transition flex items-center gap-1 disabled:opacity-50"
+                                    title="Auto-suggest medicines with AI"
+                                >
+                                    {aiLoading ? "✨ Thinking..." : "✨ AI Suggest"}
+                                </button>
+                            </div>
                         </div>
 
                         <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-col gap-3 mb-3">
@@ -683,27 +874,48 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                         </div>
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
-                            {medicines.map((med, idx) => (
-                                <div key={idx} className="group flex justify-between items-start p-2 bg-white border border-slate-100 rounded hover:border-blue-200 hover:shadow-sm transition">
-                                    <div className="flex-1">
-                                        <div className="flex justify-between">
-                                            <span className="text-xs font-bold text-slate-800">{med.name}</span>
-                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-1 rounded">{med.dosage}</span>
+                            {medicines.map((med, idx) => {
+                                const isUnverified = med.isVerified === false;
+                                return (
+                                    <div key={idx} className={`group flex justify-between items-start p-2 border rounded transition ${isUnverified ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm'}`}>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-800">{med.name}</span>
+                                                <div className="flex gap-1">
+                                                    {isUnverified && (
+                                                        <span className="text-[9px] font-bold px-1 rounded bg-amber-100 text-amber-600 border border-amber-200">
+                                                            Unverified
+                                                        </span>
+                                                    )}
+                                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-1 rounded">{med.dosage}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 mt-0.5 text-[10px] text-slate-500">
+                                                <span>{med.duration}</span>
+                                                <span>•</span>
+                                                <span>{med.instruction}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2 mt-0.5 text-[10px] text-slate-500">
-                                            <span>{med.duration}</span>
-                                            <span>•</span>
-                                            <span>{med.instruction}</span>
+                                        <div className="flex items-center ml-2">
+                                            {isUnverified && (
+                                                <button
+                                                    onClick={() => handleVerifyMedicine(idx)}
+                                                    className="mr-2 text-amber-500 hover:text-green-600 transition p-1 rounded hover:bg-green-50"
+                                                    title="Mark as Verified"
+                                                >
+                                                    ✓
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => handleDeleteMedicine(idx)}
+                                                className="text-slate-300 hover:text-red-500 opacity-60 group-hover:opacity-100 transition p-1"
+                                            >
+                                                <FiTrash2 size={12} />
+                                            </button>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={() => handleDeleteMedicine(idx)}
-                                        className="ml-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
-                                    >
-                                        <FiTrash2 size={12} />
-                                    </button>
-                                </div>
-                            ))}
+                                )
+                            })}
                             {medicines.length === 0 && (
                                 <div className="text-center py-8 text-xs text-slate-400 italic">
                                     No medicines added yet.

@@ -4,11 +4,11 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client
 import { v7 as uuidv7 } from 'uuid';
 
 const s3Client = new S3Client({
-    region: "us-east-1",
-    endpoint: "https://s3api.cool.ytosko.dev",
+    region: process.env.S3_REGION || "us-east-1",
+    endpoint: process.env.S3_ENDPOINT,
     credentials: {
-        accessKeyId: "Ytosko",
-        secretAccessKey: "IOS319802na!"
+        accessKeyId: process.env.S3_ACCESS_KEY_ID || "",
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || ""
     },
     forcePathStyle: true
 });
@@ -29,7 +29,7 @@ export async function uploadFile(formData: FormData): Promise<{ url?: string; er
         const key = `easy_prescribe/${filename}`;
 
         const command = new PutObjectCommand({
-            Bucket: "backup",
+            Bucket: process.env.S3_BUCKET_NAME || "backup",
             Key: key,
             Body: buffer,
             ContentType: file.type
@@ -37,7 +37,7 @@ export async function uploadFile(formData: FormData): Promise<{ url?: string; er
 
         await s3Client.send(command);
 
-        const url = `https://s3api.cool.ytosko.dev/backup/easy_prescribe/${filename}`;
+        const url = `${process.env.NEXT_PUBLIC_S3_PUBLIC_URL_PREFIX}/${filename}`;
         return { url };
     } catch (error: any) {
         console.error("S3 Upload Error:", error);
@@ -52,7 +52,7 @@ export async function uploadPdfBuffer(buffer: Buffer): Promise<string> {
         const key = `easy_prescribe/${filename}`;
 
         const command = new PutObjectCommand({
-            Bucket: "backup",
+            Bucket: process.env.S3_BUCKET_NAME || "backup",
             Key: key,
             Body: buffer,
             ContentType: "application/pdf"
@@ -60,7 +60,7 @@ export async function uploadPdfBuffer(buffer: Buffer): Promise<string> {
 
         await s3Client.send(command);
 
-        const url = `https://s3api.cool.ytosko.dev/backup/easy_prescribe/${filename}`;
+        const url = `${process.env.NEXT_PUBLIC_S3_PUBLIC_URL_PREFIX}/easy_prescribe/${filename}`;
         return url;
     } catch (error: any) {
         console.error("S3 PDF Upload Error:", error);
@@ -72,7 +72,7 @@ export async function deleteFile(url: string): Promise<{ success?: boolean; erro
     try {
         // Extract key from URL
         // URL: https://s3api.cool.ytosko.dev/backup/easy_prescribe/filename.ext
-        const parts = url.split('/backup/');
+        const parts = url.split('/backup/easy_prescribe/');
         if (parts.length < 2) {
             console.error("Invalid URL format for deletion:", url);
             return { error: "Invalid URL" };
@@ -80,7 +80,7 @@ export async function deleteFile(url: string): Promise<{ success?: boolean; erro
         const key = parts[1]; // easy_prescribe/filename.ext
 
         const command = new DeleteObjectCommand({
-            Bucket: "backup",
+            Bucket: process.env.S3_BUCKET_NAME || "backup",
             Key: key,
         });
 

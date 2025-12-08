@@ -13,7 +13,7 @@ export async function createPrescription(templateName: string, data: any) {
             data: data
         };
 
-        const response = await fetch("https://report.cool.ytosko.dev/api/report", {
+        const response = await fetch(process.env.JSREPORT_API_URL || "https://report.cool.ytosko.dev/api/report", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
