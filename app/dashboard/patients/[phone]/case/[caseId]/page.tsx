@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getAuth } from "firebase/auth";
-import { getDatabase, ref, get, push, set } from "firebase/database";
+import { getDatabase, ref, get, push, set, update } from "firebase/database";
 import { app } from "@/lib/firebase";
 import { FiArrowLeft, FiPlus, FiFileText, FiClock, FiTrash2, FiFolder, FiSave } from "react-icons/fi";
 import Link from "next/link";
@@ -186,7 +186,41 @@ export default function CaseDetailsPage() {
 
             await set(newRecordRef, newRecord);
 
+            await set(newRecordRef, newRecord);
+
             setRecords(prev => [{ id: newRecordRef.key as string, ...newRecord }, ...prev]);
+
+            // Update Patient Visit Dates if new prescription
+            if (typeToSave === 'prescription' && data?.nextVisit) {
+                const now = Date.now();
+                let nextVisitMs = now;
+                const { amount, unit } = data.nextVisit;
+
+                if (amount > 0) {
+                    if (unit === 'Days') nextVisitMs += amount * 24 * 60 * 60 * 1000;
+                    else if (unit === 'Weeks') nextVisitMs += amount * 7 * 24 * 60 * 60 * 1000;
+                    else if (unit === 'Months') nextVisitMs += amount * 30 * 24 * 60 * 60 * 1000;
+                } else {
+                    nextVisitMs = 0; // No next visit or continued? Let's just keep it 0 or ignore.
+                    // Actually let's assume if amount is 0, we don't set a specific next visit date?
+                    // Or just set to now?
+                    // Let's rely on valid input from modal which defaults to 7 days.
+                }
+
+                if (nextVisitMs > now) {
+                    await update(ref(db, `users/${user.uid}/patients/${phone}`), {
+                        lastVisit: now,
+                        nextVisit: nextVisitMs
+                    });
+                    // Also update local patient data to reflect change immediately if needed, 
+                    // though we re-fetch effectively or it's just header info.
+                } else {
+                    // Just update last visit
+                    await update(ref(db, `users/${user.uid}/patients/${phone}`), {
+                        lastVisit: now
+                    });
+                }
+            }
 
             // Reset States
             setIsCreating(false);
@@ -211,6 +245,32 @@ export default function CaseDetailsPage() {
         if (rec.type === 'prescription') {
             try {
                 const data = JSON.parse(rec.content);
+                if (data.pdfUrl) {
+                    return (
+                        <div className="flex flex-col gap-4">
+                            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-red-100 text-red-500 rounded flex items-center justify-center">
+                                        <FiFileText size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-700 text-sm">Prescription Generated</p>
+                                        <p className="text-xs text-slate-500">{new Date(data.generatedAt || rec.date).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                                <a
+                                    href={data.pdfUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-slate-800 text-white px-4 py-2 rounded text-xs font-bold hover:bg-slate-700 transition flex items-center gap-2"
+                                >
+                                    View PDF ↗
+                                </a>
+                            </div>
+                            {/* Optional: Show notes or summary if added later */}
+                        </div>
+                    );
+                }
                 return <PrescriptionViewer data={data} />;
             } catch (e) {
                 return <div dangerouslySetInnerHTML={{ __html: rec.content }} />;

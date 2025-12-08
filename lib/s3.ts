@@ -1,6 +1,6 @@
 "use server";
 
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { v7 as uuidv7 } from 'uuid';
 
 const s3Client = new S3Client({
@@ -38,7 +38,6 @@ export async function uploadFile(formData: FormData): Promise<{ url?: string; er
         await s3Client.send(command);
 
         const url = `https://s3api.cool.ytosko.dev/backup/easy_prescribe/${filename}`;
-        // ... existing code ...
         return { url };
     } catch (error: any) {
         console.error("S3 Upload Error:", error);
@@ -46,10 +45,31 @@ export async function uploadFile(formData: FormData): Promise<{ url?: string; er
     }
 }
 
+export async function uploadPdfBuffer(buffer: Buffer): Promise<string> {
+    try {
+        const id = uuidv7();
+        const filename = `${id}.pdf`;
+        const key = `easy_prescribe/${filename}`;
+
+        const command = new PutObjectCommand({
+            Bucket: "backup",
+            Key: key,
+            Body: buffer,
+            ContentType: "application/pdf"
+        });
+
+        await s3Client.send(command);
+
+        const url = `https://s3api.cool.ytosko.dev/backup/easy_prescribe/${filename}`;
+        return url;
+    } catch (error: any) {
+        console.error("S3 PDF Upload Error:", error);
+        throw new Error(error.message || "PDF Upload failed");
+    }
+}
+
 export async function deleteFile(url: string): Promise<{ success?: boolean; error?: string }> {
     try {
-        const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
-
         // Extract key from URL
         // URL: https://s3api.cool.ytosko.dev/backup/easy_prescribe/filename.ext
         const parts = url.split('/backup/');

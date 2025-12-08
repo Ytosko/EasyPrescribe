@@ -26,9 +26,9 @@
         "jaundice": "radio -> 'Nil' or 'Present'",
         "heart": "radio -> 'Normal' or 'Abnormal'",
         "lungs": "radio -> 'Clear' or 'Abnormal'",
-        "suggested_tests": "text input -> full text [keep \n as \n ]",
-        "provisional_dx": "text input -> full text [keep \n as \n ]",
-        "notes": "text input -> full text [replace \n with <br> ]"
+        "suggested_tests": "textarea -> full text [keep \n as \n ]",
+        "provisional_dx": "text input -> full",
+        "notes": "textarea -> full text [replace \n with <br> ]"
     },
     "date": "date input -> full text as dd/mm/yyyy",
     "chember": {
