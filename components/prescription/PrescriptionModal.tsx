@@ -8,6 +8,9 @@ import { getTemplateData } from "@/app/actions/getTemplate";
 import { searchMedicines } from "@/app/actions/getMedicines";
 import { createPrescription } from "@/app/actions/createPrescription";
 
+import { BengaliInput } from "@/components/ui/BengaliInput";
+import { BengaliTextarea } from "@/components/ui/BengaliTextarea";
+
 interface PrescriptionModalProps {
     isOpen?: boolean;
     onClose: () => void;
@@ -22,6 +25,7 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
     const [configs, setConfigs] = useState<any[]>([]);
     const [selectedConfigId, setSelectedConfigId] = useState<string>("");
     const [loading, setLoading] = useState(true);
+    const [isBanglaMode, setIsBanglaMode] = useState(false);
 
     // General Form State
     const [date, setDate] = useState(new Date().toLocaleDateString('en-GB'));
@@ -283,8 +287,26 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
         if (!selectedConfig) return;
 
         const baseData = selectedConfig.fullData.data || {};
-        const pages = baseData.pages || [{}];
-        pages[0].medicines = medicines.map((m, i) => ({ ...m, index: i + 1 }));
+
+        // Pagination Logic: Max 6 medicines per page
+        const pages: any[] = [];
+        const templatePage = (baseData.pages && baseData.pages[0]) ? baseData.pages[0] : {};
+        const MEDICINES_PER_PAGE = 6;
+
+        if (medicines.length === 0) {
+            pages.push({ ...templatePage, medicines: [] });
+        } else {
+            for (let i = 0; i < medicines.length; i += MEDICINES_PER_PAGE) {
+                const chunk = medicines.slice(i, i + MEDICINES_PER_PAGE).map((m, idx) => ({
+                    ...m,
+                    index: i + idx + 1
+                }));
+                pages.push({
+                    ...templatePage,
+                    medicines: chunk
+                });
+            }
+        }
 
         const formattedFields = { ...patientFields };
 
@@ -356,6 +378,17 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
         };
 
         executeCreation();
+    };
+
+    // --- Renderers ---
+
+    // Helper for Bengali Toggle logic
+    const shouldEnableBangla = (key: string) => {
+        if (!isBanglaMode) return false;
+        const k = key.toLowerCase();
+        // Exclude Name and Age from Bengali Mode as requested
+        if (k.includes('name') || k === 'age' || k.includes('phone') || k.includes('mobile')) return false;
+        return true;
     };
 
     const renderField = (key: string) => {
@@ -434,6 +467,17 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
         }
 
         if (conf.inputType === 'textarea') {
+            if (shouldEnableBangla(key)) {
+                return (
+                    <BengaliTextarea
+                        label={key.replace(/_/g, ' ').toUpperCase()}
+                        value={val}
+                        onChangeText={onChange}
+                        rows={3}
+                        dropUp={key.toLowerCase().includes('notes') || key.toLowerCase().includes('plan')}
+                    />
+                );
+            }
             return (
                 <div className="flex flex-col gap-1">
                     <Label>{key.replace(/_/g, ' ').toUpperCase()}</Label>
@@ -446,6 +490,21 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                     />
                 </div>
             )
+        }
+
+        // Text Input
+        if (shouldEnableBangla(key)) {
+            return (
+                <div className="mb-[-1.5rem]"> {/* Negative margin hack to align with compact style */}
+                    <BengaliInput
+                        label={key.replace(/_/g, ' ').replace(/\./g, ' > ')}
+                        value={val}
+                        onChangeText={onChange}
+                        id={`bn-input-${key}`}
+                        placeholder="..."
+                    />
+                </div>
+            );
         }
 
         return (
@@ -472,6 +531,19 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                     >
                         {configs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
+
+                    {/* Bengali Toggle */}
+                    <button
+                        onClick={() => setIsBanglaMode(!isBanglaMode)}
+                        className={`
+                            px-2 py-0.5 rounded text-[10px] font-bold border transition-all ml-2
+                            ${isBanglaMode
+                                ? 'bg-emerald-500 text-white border-emerald-500'
+                                : 'bg-transparent text-slate-400 border-slate-600 hover:border-slate-400'}
+                        `}
+                    >
+                        {isBanglaMode ? 'বাংলা ON' : 'বাংলা OFF'}
+                    </button>
                 </div>
                 <div className="text-xs font-mono text-slate-400">{date}</div>
             </div>
@@ -515,15 +587,24 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                                     />
                                     {/* Suggestions Dropdown */}
                                     {showSuggestions && suggestions.length > 0 && (
-                                        <div className="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto">
+                                        <div className="absolute z-50 w-[150%] left-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
                                             {suggestions.map((med, idx) => (
                                                 <div
                                                     key={idx}
                                                     onClick={() => handleSelectMedicine(med)}
-                                                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex justify-between border-b border-slate-50 last:border-none"
+                                                    className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-none flex flex-col gap-0.5"
                                                 >
-                                                    <span className="text-sm font-bold text-slate-800">{med.name}</span>
-                                                    <span className="text-xs text-blue-600 font-bold bg-blue-50 px-1 rounded">{med.strength}</span>
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        <span className="text-sm font-bold text-slate-800 leading-tight">{med.name}</span>
+                                                        <span className="shrink-0 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                                            {med.strength}
+                                                        </span>
+                                                    </div>
+                                                    {med.generic && (
+                                                        <span className="text-[10px] text-slate-500 italic truncate w-full block">
+                                                            {med.generic}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

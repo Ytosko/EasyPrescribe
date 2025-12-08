@@ -5,13 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { clsx } from "clsx";
-import { FiHome, FiUsers, FiCalendar, FiUser, FiSettings, FiLogOut, FiActivity, FiBriefcase, FiEdit3 } from "react-icons/fi";
+import { FiHome, FiUsers, FiCalendar, FiUser, FiSettings, FiLogOut, FiActivity, FiBriefcase, FiEdit3, FiClock } from "react-icons/fi";
 import EasyPrescribeLogo from "@/components/ui/Logo";
 
 const menuItems = [
     { name: "Overview", href: "/dashboard", icon: FiHome },
     { name: "My Info", href: "/dashboard/settings", icon: FiEdit3 },
     { name: "Patients", href: "/dashboard/patients", icon: FiUsers },
+    { name: "Recent Patients", href: "/dashboard/recent-patients", icon: FiClock },
     { name: "Schedules", href: "/dashboard/schedules", icon: FiCalendar },
     { name: "Prescription", href: "/dashboard/prescription", icon: FiActivity },
 ];

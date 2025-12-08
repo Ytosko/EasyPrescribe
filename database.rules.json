@@ -1,0 +1,15 @@
+{
+    "rules": {
+        "users": {
+            "$uid": {
+                "patients": {
+                    ".indexOn": [
+                        "lastVisit"
+                    ]
+                }
+            }
+        },
+        ".read": "auth != null",
+        ".write": "auth != null"
+    }
+}

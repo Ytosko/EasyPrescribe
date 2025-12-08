@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getAuth } from "firebase/auth";
-import { getDatabase, ref, get, push, set, update } from "firebase/database";
+import { getDatabase, ref, get, push, set, update, runTransaction } from "firebase/database";
 import { app } from "@/lib/firebase";
 import { FiArrowLeft, FiPlus, FiFileText, FiClock, FiTrash2, FiFolder, FiSave } from "react-icons/fi";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import Swal from "sweetalert2";
+import printJS from "print-js";
 import PrescriptionModal from "@/components/prescription/PrescriptionModal";
 import PrescriptionViewer from "@/components/prescription/PrescriptionViewer";
 
@@ -39,6 +40,7 @@ export default function CaseDetailsPage() {
     const [saving, setSaving] = useState(false);
     const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false);
     const [patientData, setPatientData] = useState<any>(null);
+    const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         const auth = getAuth(app);
@@ -212,14 +214,33 @@ export default function CaseDetailsPage() {
                         lastVisit: now,
                         nextVisit: nextVisitMs
                     });
-                    // Also update local patient data to reflect change immediately if needed, 
-                    // though we re-fetch effectively or it's just header info.
                 } else {
                     // Just update last visit
                     await update(ref(db, `users/${user.uid}/patients/${phone}`), {
                         lastVisit: now
                     });
                 }
+            }
+
+            // Log Activity for Prescription Creation
+            if (typeToSave === 'prescription') {
+                const activityRef = push(ref(db, `users/${user.uid}/activities`));
+                await set(activityRef, {
+                    type: 'prescription_created',
+                    timestamp: Date.now(),
+                    data: {
+                        patientName: patientData?.name || 'Unknown',
+                        patientPhone: phone,
+                        createdBy: user.email,
+                        caseId: caseId
+                    }
+                });
+
+                // Increment Total Prescriptions Count
+                const statsRef = ref(db, `users/${user.uid}/stats/prescriptions`);
+                await runTransaction(statsRef, (currentCount) => {
+                    return (currentCount || 0) + 1;
+                });
             }
 
             // Reset States
@@ -258,14 +279,24 @@ export default function CaseDetailsPage() {
                                         <p className="text-xs text-slate-500">{new Date(data.generatedAt || rec.date).toLocaleString()}</p>
                                     </div>
                                 </div>
-                                <a
-                                    href={data.pdfUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="bg-slate-800 text-white px-4 py-2 rounded text-xs font-bold hover:bg-slate-700 transition flex items-center gap-2"
-                                >
-                                    View PDF ↗
-                                </a>
+                                <div className="flex gap-2">
+                                    <a
+                                        href={data.pdfUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2"
+                                    >
+                                        Print 🖨️
+                                    </a>
+                                    <a
+                                        href={data.pdfUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="bg-[#007ACC] text-white px-4 py-2 rounded text-xs font-bold hover:bg-blue-600 transition flex items-center gap-2"
+                                    >
+                                        View PDF ↗
+                                    </a>
+                                </div>
                             </div>
                             {/* Optional: Show notes or summary if added later */}
                         </div>
@@ -307,7 +338,7 @@ export default function CaseDetailsPage() {
                                 onClick={handleNewRecordClick} // Opens Inline "Type Selector"
                                 className="bg-[#007ACC] text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition flex items-center gap-2 font-medium"
                             >
-                                <FiPlus /> Add Record
+                                <FiPlus /> New
                             </button>
                         </div>
                     </div>
@@ -317,83 +348,125 @@ export default function CaseDetailsPage() {
             {/* Type Selector / Inline Editor */}
             {isCreating && (
                 <div className="bg-white rounded-xl shadow-lg border border-blue-100 ring-4 ring-blue-50/50 animate-in slide-in-from-top-4 fade-in duration-300 overflow-hidden">
-
-                    {/* Tabs */}
-                    <div className="flex border-b border-slate-100 bg-slate-50/50">
-                        <button
-                            onClick={() => setRecordType('prescription')}
-                            className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition ${recordType === 'prescription' ? 'bg-white text-[#007ACC] border-t-2 border-t-[#007ACC] shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
-                        >
-                            <span>💊</span> Prescription
-                        </button>
-                        <button
-                            onClick={() => setRecordType('note')}
-                            className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition ${recordType === 'note' ? 'bg-white text-[#007ACC] border-t-2 border-t-[#007ACC] shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
-                        >
-                            <span>📝</span> Clinical Note
-                        </button>
-                    </div>
-
-                    <div className="p-6 space-y-4">
-
-                        {/* Prescription Specific UI */}
-                        {recordType === 'prescription' ? (
-                            <div className="min-h-[500px] border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                                <PrescriptionModal
-                                    isOpen={true} // Always match "open" since we are in the flow
-                                    onClose={() => setIsCreating(false)}
-                                    onSave={handleSaveRecord}
-                                    user={user}
-                                    patientPhone={phone}
-                                    patientData={patientData}
-                                    className="h-full"
-                                />
-                            </div>
-                        ) : (
-                            // Generic Editor for Notes
-                            <div className="h-80 pb-12">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={recordContent}
-                                    onChange={setRecordContent}
-                                    className="h-full bg-white"
-                                    placeholder="Type your clinical notes here..."
-                                />
-                            </div>
-                        )}
-
-                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                            <button onClick={() => setIsCreating(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg transition" disabled={saving}>Cancel</button>
-                            {recordType !== 'prescription' && (
-                                <button onClick={() => handleSaveRecord()} disabled={saving || !recordContent.trim()} className="px-6 py-2 bg-[#007ACC] text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                                    {saving ? <span className="animate-spin">⌛</span> : <FiSave />}
-                                    Save Note
-                                </button>
-                            )}
+                    <div className="p-0">
+                        {/* Prescription Specific UI - No Tabs, Default View */}
+                        <div className="min-h-[500px] border-b border-slate-200 overflow-hidden shadow-sm">
+                            <PrescriptionModal
+                                isOpen={true}
+                                onClose={() => setIsCreating(false)}
+                                onSave={handleSaveRecord}
+                                user={user}
+                                patientPhone={phone}
+                                patientData={patientData}
+                                className="h-full border-none shadow-none rounded-none"
+                            />
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Records List ... */}
-            <div className="space-y-6">
-                {records.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400"><p>No records in this case yet.</p></div>
-                ) : (
-                    records.map((rec) => (
-                        <div key={rec.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                            <div className={`px-6 py-3 border-b flex justify-between items-center ${rec.type === 'prescription' ? 'bg-green-50/50 border-green-100' : rec.type === 'lab' ? 'bg-purple-50/50 border-purple-100' : 'bg-blue-50/50 border-blue-100'}`}>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xl">{rec.type === 'prescription' ? '💊' : rec.type === 'lab' ? '🔬' : '📝'}</span>
-                                    <span className={`font-bold uppercase tracking-wide text-xs ${rec.type === 'prescription' ? 'text-green-700' : rec.type === 'lab' ? 'text-purple-700' : 'text-blue-700'}`}>{rec.type}</span>
-                                    <span className="text-slate-400 text-sm flex items-center gap-1">• <FiClock size={12} /> {new Date(rec.date).toLocaleString()}</span>
-                                </div>
-                            </div>
-                            <div className="p-6 prose prose-sm max-w-none text-slate-700">
-                                {renderRecordContent(rec)}
-                            </div>
+            {/* Records Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs text-slate-500">Date & Type</th>
+                                <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs text-slate-500 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {records.slice((currentPage - 1) * 20, currentPage * 20).map((rec) => {
+                                let pdfUrl = null;
+                                let isPrescription = rec.type === 'prescription';
+
+                                if (isPrescription) {
+                                    try {
+                                        const data = JSON.parse(rec.content);
+                                        pdfUrl = data.pdfUrl;
+                                    } catch (e) {
+                                        // legacy or note
+                                    }
+                                }
+
+                                return (
+                                    <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg ${rec.type === 'prescription' ? 'bg-green-100 text-green-600' :
+                                                    rec.type === 'lab' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                                                    }`}>
+                                                    {rec.type === 'prescription' ? '💊' : rec.type === 'lab' ? '🔬' : '📝'}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-900">
+                                                        {rec.type === 'prescription' ? 'Prescription' : rec.type === 'lab' ? 'Lab Report' : 'Clinical Note'}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500 font-mono">
+                                                        {new Date(rec.date).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            {pdfUrl ? (
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => printJS(pdfUrl)}
+                                                        className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-50 transition flex items-center gap-1.5"
+                                                    >
+                                                        🖨️ Print
+                                                    </button>
+                                                    <a
+                                                        href={pdfUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="bg-[#007ACC] text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-600 transition flex items-center gap-1.5"
+                                                    >
+                                                        PDF ↗
+                                                    </a>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-400 italic">No actions available</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {records.length === 0 && (
+                                <tr>
+                                    <td colSpan={2} className="px-6 py-12 text-center text-slate-400">
+                                        No records found.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination */}
+                {records.length > 20 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50">
+                        <span className="text-xs text-slate-500">
+                            Showing <span className="font-bold">{(currentPage - 1) * 20 + 1}</span> to <span className="font-bold">{Math.min(currentPage * 20, records.length)}</span> of <span className="font-bold">{records.length}</span> results
+                        </span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1 text-xs font-bold bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(records.length / 20), p + 1))}
+                                disabled={currentPage >= Math.ceil(records.length / 20)}
+                                className="px-3 py-1 text-xs font-bold bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Next
+                            </button>
                         </div>
-                    ))
+                    </div>
                 )}
             </div>
 

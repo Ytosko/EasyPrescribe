@@ -7,12 +7,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { FiActivity, FiPlus, FiUsers, FiUserPlus, FiCalendar } from 'react-icons/fi';
-import { getDatabase, ref, get, query, orderByChild, limitToLast } from "firebase/database";
+import { getDatabase, ref, get, query, orderByChild, limitToLast, set } from "firebase/database";
 import { clsx } from 'clsx';
 
 interface Activity {
     id: string;
-    type: 'patient_created' | 'appointment_created';
+    type: 'patient_created' | 'appointment_created' | 'prescription_created';
     timestamp: number;
     data: {
         patientName?: string;
@@ -46,10 +46,48 @@ export default function DashboardPage() {
                 const patientsSnap = await get(patientsRef);
                 const totalPatients = patientsSnap.exists() ? Object.keys(patientsSnap.val()).length : 0;
 
-                // Fetch Total Prescriptions
-                const prescriptionsRef = ref(db, `users/${user.uid}/prescriptions`);
-                const prescriptionsSnap = await get(prescriptionsRef);
-                const totalPrescriptions = prescriptionsSnap.exists() ? Object.keys(prescriptionsSnap.val()).length : 0;
+                // Fetch Total Prescriptions (Stats)
+                const statsRef = ref(db, `users/${user.uid}/stats/prescriptions`);
+                const statsSnap = await get(statsRef);
+
+                let totalPrescriptions = statsSnap.exists() ? statsSnap.val() : 0;
+
+                // Auto-Backfill: If stats is 0 (or missing), count from cases
+                if (totalPrescriptions === 0) {
+                    try {
+                        const casesRef = ref(db, `users/${user.uid}/cases`);
+                        const casesSnap = await get(casesRef);
+
+                        if (casesSnap.exists()) {
+                            let calculatedCount = 0;
+                            const cases = casesSnap.val();
+
+                            // Iterate Patients
+                            Object.values(cases).forEach((patientCases: any) => {
+                                // Iterate Cases
+                                Object.values(patientCases).forEach((caseObj: any) => {
+                                    if (caseObj && caseObj.records) {
+                                        // Count Records with type 'prescription'
+                                        Object.values(caseObj.records).forEach((rec: any) => {
+                                            if (rec.type === 'prescription') {
+                                                calculatedCount++;
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+
+                            if (calculatedCount > 0) {
+                                // Update Stats Database
+                                await set(ref(db, `users/${user.uid}/stats/prescriptions`), calculatedCount);
+                                totalPrescriptions = calculatedCount;
+                                console.log("Backfilled prescription stats:", calculatedCount);
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Backfill error:", err);
+                    }
+                }
 
                 setStats({
                     patients: totalPatients,
@@ -113,6 +151,8 @@ export default function DashboardPage() {
                 return <FiUserPlus className="text-emerald-600" />;
             case 'appointment_created':
                 return <FiCalendar className="text-blue-600" />;
+            case 'prescription_created':
+                return <FiActivity className="text-green-600" />;
             default:
                 return <FiActivity className="text-slate-600" />;
         }
@@ -144,6 +184,16 @@ export default function DashboardPage() {
                         )}
                     </>
                 );
+            case 'prescription_created':
+                return (
+                    <>
+                        <span className="text-slate-600">Generated prescription for </span>
+                        <span className="font-semibold text-slate-900">{activity.data.patientName}</span>
+                        {activity.data.createdBy && (
+                            <span className="text-slate-400 text-xs ml-2">by {activity.data.createdBy}</span>
+                        )}
+                    </>
+                );
             default:
                 return <span className="text-slate-600">Unknown activity</span>;
         }
@@ -170,7 +220,7 @@ export default function DashboardPage() {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Stat Cards */}
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
                     <div>
@@ -191,16 +241,8 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Action Card */}
-                <Link href="/dashboard/prescriptions/new" className="group bg-[#007ACC] p-6 rounded-xl border border-blue-600 shadow-lg shadow-blue-500/20 flex items-center justify-between cursor-pointer hover:bg-blue-600 transition-colors">
-                    <div>
-                        <h3 className="text-lg font-bold text-white mb-1">New Prescription</h3>
-                        <p className="text-blue-100 text-sm">Start a consultation</p>
-                    </div>
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                        <FiPlus size={24} />
-                    </div>
-                </Link>
+                {/* Action Card Removed as requested */}
+                <div className="hidden"></div>
             </div>
 
             {/* Activity Feed */}
