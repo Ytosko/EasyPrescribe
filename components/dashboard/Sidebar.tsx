@@ -40,7 +40,9 @@ export default function Sidebar() {
             <nav className="flex-1 overflow-y-auto py-6 px-3">
                 <ul className="space-y-1">
                     {menuItems.map((item) => {
-                        const isActive = pathname === item.href;
+                        const isActive = item.href === "/dashboard"
+                            ? pathname === "/dashboard"
+                            : pathname.startsWith(item.href);
                         return (
                             <li key={item.name}>
                                 <Link
@@ -66,19 +68,19 @@ export default function Sidebar() {
                     href="/dashboard/profile"
                     className={clsx(
                         "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
-                        pathname === "/dashboard/profile"
+                        pathname.startsWith("/dashboard/profile")
                             ? "bg-blue-50 text-primary"
                             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     )}
                 >
-                    <FiUser size={20} className={pathname === "/dashboard/profile" ? "text-primary" : "text-slate-400"} />
+                    <FiUser size={20} className={pathname.startsWith("/dashboard/profile") ? "text-primary" : "text-slate-400"} />
                     Profile Overview
                 </Link>
                 <Link
                     href="/dashboard/admin"
                     className={clsx(
                         "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
-                        pathname === "/dashboard/admin"
+                        pathname.startsWith("/dashboard/admin")
                             ? "bg-blue-50 text-primary"
                             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     )}

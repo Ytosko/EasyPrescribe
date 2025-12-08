@@ -818,17 +818,25 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                                     const isActive = parts[idx] && parts[idx] !== '0';
 
                                     const toggle = () => {
-                                        let currentParts = [...parts];
-                                        while (currentParts.length <= idx) currentParts.push('0');
-                                        if (currentParts.length < 3) while (currentParts.length < 3) currentParts.push('0');
+                                        let parts = newMed.dosage ? newMed.dosage.split('+').map(s => s.trim()) : [];
+                                        parts = parts.map(p => p === '' ? '0' : p);
 
-                                        if (currentParts[idx] && currentParts[idx] !== '0') {
-                                            currentParts[idx] = '0';
+                                        if (idx < 3) {
+                                            // First 3 (M, L, D): Ensure 3 parts, toggle slot
+                                            while (parts.length < 3) parts.push('0');
+                                            parts[idx] = (parts[idx] && parts[idx] !== '0') ? '0' : '1';
                                         } else {
-                                            currentParts[idx] = '1';
+                                            // Night (N): Add/Remove 4th part
+                                            while (parts.length < 3) parts.push('0');
+                                            if (parts.length > 3) {
+                                                // Remove 4th
+                                                parts = parts.slice(0, 3);
+                                            } else {
+                                                // Add 4th
+                                                parts.push('1');
+                                            }
                                         }
-
-                                        setNewMed(p => ({ ...p, dosage: currentParts.join('+') }));
+                                        setNewMed(p => ({ ...p, dosage: parts.join('+') }));
                                     };
 
                                     return (
@@ -836,11 +844,11 @@ export default function PrescriptionModal({ isOpen = true, onClose, onSave, user
                                             key={label}
                                             onClick={toggle}
                                             className={`
-                                                w-8 h-8 rounded-full text-[10px] font-bold transition-all border
-                                                ${isActive
+                                            w-8 h-8 rounded-full text-[10px] font-bold transition-all border
+                                            ${isActive
                                                     ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-105'
                                                     : 'bg-white text-slate-400 border-slate-200 hover:border-blue-300 hover:text-blue-500'}
-                                            `}
+                                        `}
                                             title={label === 'M' ? 'Morning' : label === 'L' ? 'Lunch' : label === 'D' ? 'Dinner' : 'Night'}
                                         >
                                             {label}

@@ -57,10 +57,10 @@ export async function getGeminiSuggestions(
             2. Suggest general health notes/advice (e.g. hydration, diet, rest).
                 - Min 3, Max 4 items.
                 - Brief and clear.
-            3. Suggest 3-5 relevant medicines (Brand names common in Bangladesh or Generics).
+            3. Suggest 3-5 (or more if needed) relevant medicines (Madicines available in Bangladesh or Brand names common in Bangladesh or Generics).
                 - Provide Dosage (e.g., '1+0+1', '1+1+1', '0+0+1', '10mg').
-                - Provide Duration (e.g. '7 Days', '1 Month').
-                - Provide Instruction (e.g. 'After Meal', 'Before Meal').
+                - Provide Duration (e.g. '7 Days', '1 Month', 'If Needed').
+                - Provide Instruction (e.g. 'After Meal', 'Before Meal', 'Any Time etc.') Make it small.
             
             ${languageInstruction}
 
