@@ -37,7 +37,7 @@ export async function uploadFile(formData: FormData): Promise<{ url?: string; er
 
         await s3Client.send(command);
 
-        const url = `${process.env.NEXT_PUBLIC_S3_PUBLIC_URL_PREFIX}/${filename}`;
+        const url = `${process.env.NEXT_PUBLIC_S3_PUBLIC_URL_PREFIX}/easy_prescribe/${filename}`;
         return { url };
     } catch (error: any) {
         console.error("S3 Upload Error:", error);
@@ -70,8 +70,6 @@ export async function uploadPdfBuffer(buffer: Buffer): Promise<string> {
 
 export async function deleteFile(url: string): Promise<{ success?: boolean; error?: string }> {
     try {
-        // Extract key from URL
-        // URL: https://s3api.cool.ytosko.dev/backup/easy_prescribe/filename.ext
         const parts = url.split('/backup/easy_prescribe/');
         if (parts.length < 2) {
             console.error("Invalid URL format for deletion:", url);
